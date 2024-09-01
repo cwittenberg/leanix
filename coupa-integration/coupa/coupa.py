@@ -111,12 +111,12 @@ class CoupaAPI:
         return harmonized_name
 
     def get_po_companies(self):
-        url = 'https://akzonobel.coupahost.com/api/purchase_order_lines?commodity[id]=1039&commodity[name]=IT Software and Maintenance - L4&fields=["description", "created-at", "updated-at", {"supplier": ["id", "name"]}]'
+        url = 'https://<your-tenant>.coupahost.com/api/purchase_order_lines?commodity[id]=1039&commodity[name]=IT Software and Maintenance - L4&fields=["description", "created-at", "updated-at", {"supplier": ["id", "name"]}]'
         
         
         #iterate throguh applicable contracts - if so existing
         supplier_id=1200
-        url = f'https://akzonobel.coupahost.com/api/contracts?fields=["id", "created-at", "updated-at", "name","description","type","min-commit", "max-commit", "term-type"]&status=published&supplier[id]={supplier_id}'
+        url = f'https://<your-tenant>.coupahost.com/api/contracts?fields=["id", "created-at", "updated-at", "name","description","type","min-commit", "max-commit", "term-type"]&status=published&supplier[id]={supplier_id}'
 
     @retry(
         stop=stop_after_attempt(3),  # Stop after 5 attempts
