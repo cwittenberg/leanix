@@ -12,7 +12,8 @@ Features:
 - Facilitates currency conversion for contracts in non-group currency (i.e. EUR, using exchangeratesapi.io)
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
 
-TODO:
+TODO: 
 - [ ] Automated scheduling (i.e. using Azure CF)
 - [ ] Load also Support and SoW contracts outside of licenses
 - [ ] Add RFx detection 
+- [ ] Update IT Components with Cost from contracts
