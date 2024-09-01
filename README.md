@@ -2,8 +2,8 @@
 
 ## Coupa integration
 How it works:
-- Facilitates initial load, since standard Coupa API does not filter on custom-fields, approach taken is to pull all POs from a granular IT category
-- Based on Suppliers found, all contracts are pulled pertaining to supplier
+- Facilitates initial load, since standard Coupa API does not filter on custom-fields that contain granular commodity codes (as is common practice), approach taken is to pull all POs from a granular IT category
+- Based on Suppliers found from all POs in the granular commodity category, all contracts are pulled pertaining to each supplier
 - Sanitized Contracts are uploaded to LeanIX via GraphQL
 
 Features:
