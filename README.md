@@ -1,6 +1,9 @@
 # leanix
 
 ## Coupa integration
+Purpose:
+- Load contracts from Coupa into LeanIX such that Architects/those responsible can receive notifications about when an opportunity arises to make a (commercial) transition in view of roadmap
+
 How it works:
 - Facilitates initial load, since standard Coupa API does not filter on custom-fields that contain granular commodity codes (as is common practice), approach taken is to pull all POs from a granular IT category
 - Based on Suppliers found from all POs in the granular commodity category, all contracts are pulled pertaining to each supplier
