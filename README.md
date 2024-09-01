@@ -7,3 +7,8 @@
 - Auto-detection of Amendment vs Contract
 - Facilitates currency conversion for contracts in non-group currency (i.e. EUR, using exchangeratesapi.io)
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
+
+### TODO
+- Automated scheduling (i.e. using Azure CF)
+- Load also Support and SoW contracts outside of licenses
+- RFx detection 
