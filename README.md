@@ -7,8 +7,8 @@ How it works:
 - Sanitized Contracts are uploaded to LeanIX via GraphQL
 
 Features:
-- Auto-detection for existing Applications and Providers in LeanIX metamodel
-- Auto-detection of Amendment vs Contract
+- Auto-detection for existing Applications and Providers in LeanIX metamodel during load
+- Auto-detection of Amendment vs Contract factsheet sub-types
 - Facilitates currency conversion for contracts in non-group currency (i.e. EUR, using exchangeratesapi.io)
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
 
