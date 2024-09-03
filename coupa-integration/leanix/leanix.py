@@ -65,6 +65,7 @@ class LeanIXAPI:
         try:
             # print(json_data)  # For debugging purposes
             response = requests.post(url=self.request_url, headers=self.header, data=json_data, verify=False, timeout=10)
+            # print(response.text)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             if response:
@@ -73,6 +74,9 @@ class LeanIXAPI:
                     print("Unauthorized. Re-authenticating...")
                     self.header = self._authenticate()
                     return self._call(query, dump)
+                else:
+                    # print(response.text)
+                    pass
             
             print(f"Request failed: {e}")
             raise
@@ -247,7 +251,12 @@ class LeanIXAPI:
                 edges {
                     node {
                         id
-                        name
+                        name              
+                        ...on %s {
+                            externalId {
+                                externalId
+                            }
+                        }
 
                         ...on Application{
                             alias
@@ -256,26 +265,36 @@ class LeanIXAPI:
                 }
             }
         }
-        """ % type
+        """ % (type, type)
+
 
         response = self._call(query)
 
         # Collect all applications with their ids
         applications = []
 
-
         for edge in response['data']['allFactSheets']['edges']:
-            applications.append({
+            item = {
                 'id': edge['node']['id'],
                 'name': edge['node']['name'],
-            })
+                'externalId': None,
+                'alias': None
+            }
 
+            #stamp externalId on the record
+            if 'externalId' in edge['node']:
+                if edge['node']['externalId'] != "" and edge['node']['externalId'] is not None: 
+                    if 'externalId' in edge['node']['externalId']:
+                        if edge['node']['externalId']['externalId'] != "":
+                            item['externalId'] = edge['node']['externalId']['externalId']
+
+            
             if 'alias' in edge['node']:
                 if edge['node']['alias'] != "":
-                    applications[-1]['alias'] = edge['node']['alias']
-            else:
-                applications[-1]['alias'] = None
-        
+                    item['alias'] = edge['node']['alias']
+            
+            applications.append(item)
+
         return applications
 
     def create_it_component(self, name):
@@ -285,7 +304,7 @@ class LeanIXAPI:
         return self.create_factsheet("Application", name)
     
     
-    def create_contract(self, supplierName, name, description, subtype="Contract", isActive=True, isExpired=False, contractValue=0, numberOfSeats=None, volumeType="License", phasein_date=None, active_date=None, notice_date=None, eol_date=None, externalId="", externalUrl="", applicationId="", domains=[], managedByName=None, managedByEmail=None, currency="EUR"):
+    def create_contract(self, supplierName, name, description, subtype="Contract", isActive=True, isExpired=False, contractValue=0, numberOfSeats=None, volumeType="License", phasein_date=None, active_date=None, notice_date=None, eol_date=None, externalId="", externalUrl="", applicationId="", domains=[], managedByName=None, managedByEmail=None, currency="EUR", additionalTags=[]):
         # set None to ""
         if phasein_date is None:
             phasein_date = ""
@@ -377,12 +396,13 @@ class LeanIXAPI:
                 "value": '[{"tagId":"' + self._expired_tag + '"}]'
             })
 
-        if volumeType == "License":
-            patches.append({
-                "op": "add",
-                "path": "/tags",
-                "value": '[{"tagId":"0ffd0620-24d4-4d06-995f-aa6bff8744dd"}]'
-            })
+        if additionalTags and len(additionalTags) == 0:
+            if volumeType == "License":
+                patches.append({
+                    "op": "add",
+                    "path": "/tags",
+                    "value": '[{"tagId":"0ffd0620-24d4-4d06-995f-aa6bff8744dd"}]'
+                })
 
         if currency != "EUR":
             patches.append({
@@ -457,6 +477,14 @@ class LeanIXAPI:
                 "value": externalStr
             },            
         ])
+
+        if additionalTags and len(additionalTags) > 0:
+            for tag in additionalTags:
+                patches.append({
+                    "op": "add",
+                    "path": "/tags",
+                    "value": '[{"tagId":"' + tag + '"}]'
+                })
 
         if managedByName is not None and managedByEmail is not None:
             patches.append({
@@ -666,10 +694,11 @@ class LeanIXAPI:
         
 
     
-    
-    
-    
     def delete_contracts_with_coupa_tag(self):
+        self.delete_contracts_with_tag(self._coupa_tag)
+    
+    
+    def delete_contracts_with_tag(self,theTag):
         """Delete all contract factsheets that have the 'Coupa' tag."""
         if not self._coupa_tag:
             raise Exception("Coupa tag ID is not available. Ensure it is set during initialization.")
@@ -707,7 +736,7 @@ class LeanIXAPI:
                         "facetKey": "_TAGS_",
                         "operator": "OR",
                         "keys": [
-                            self._coupa_tag
+                            theTag
                         ]
                     },
                     {
