@@ -7,7 +7,7 @@ import os
 import zipfile
 from urllib3.exceptions import InsecureRequestWarning
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Suppress only the InsecureRequestWarning from urllib3
 warnings.simplefilter('ignore', InsecureRequestWarning)
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class CoupaAPI:
     _exchange_rates = []
-    _rate_token = "" #<add token here> for exchangeratesapi.io
+    _rate_token = "<your token here>"
 
     def __init__(self, domain, client_id, client_secret, verify_ssl=True):
         self.domain = domain
@@ -33,8 +33,11 @@ class CoupaAPI:
         self.access_token = None
 
     def get_date(self, date_str):
-        dt = datetime.fromisoformat(date_str).date()
-        return dt.strftime('%Y-%m-%d')
+        if date_str is not None:
+            dt = datetime.fromisoformat(date_str).date()
+            return dt.strftime('%Y-%m-%d')
+        else:
+            return None
     
     def get_rates(self):
         try: 
@@ -111,12 +114,11 @@ class CoupaAPI:
         return harmonized_name
 
     def get_po_companies(self):
-        url = 'https://<your-tenant>.coupahost.com/api/purchase_order_lines?commodity[id]=1039&commodity[name]=IT Software and Maintenance - L4&fields=["description", "created-at", "updated-at", {"supplier": ["id", "name"]}]'
+        url = 'https://<your host>.coupahost.com/api/purchase_order_lines?commodity[id]=1039&commodity[name]=IT Software and Maintenance - L4&fields=["description", "created-at", "updated-at", {"supplier": ["id", "name"]}]'
         
         
         #iterate throguh applicable contracts - if so existing
-        supplier_id=1200
-        url = f'https://<your-tenant>.coupahost.com/api/contracts?fields=["id", "created-at", "updated-at", "name","description","type","min-commit", "max-commit", "term-type"]&status=published&supplier[id]={supplier_id}'
+        url = f'https://<your host>.coupahost.com/api/contracts?fields=["id", "created-at", "updated-at", "name","description","type","min-commit", "max-commit", "term-type"]&status=published' #&supplier[id]={supplier_id}
 
     @retry(
         stop=stop_after_attempt(3),  # Stop after 5 attempts
@@ -146,18 +148,26 @@ class CoupaAPI:
         
         return response
 
-    def get_all_contracts(self,limit=50):
+    def get_all_contracts(self,callback=None, excludeId=[], filteringCategory=0, limit=50, retrieveSinceYesterday=False):
         """Retrieve all contracts with pagination until none are left."""
         if not self.access_token:
             raise Exception("Access token not available. Call obtain_access_token() first.")
 
-        all_contracts = []
+        # all_contracts = []
         offset = 0
 
         while True:
-            contracts_url = f'https://{self.domain}/api/contracts?status=published'
-            
+            if not retrieveSinceYesterday:
+                contracts_url = f'https://{self.domain}/api/contracts?status=published&min-commit[gt]=1'
+            else:
+                #date filter set
+                #yesterday in yyyy-mm-dd hh:mm:ss format
+                yesterday = datetime.now() - timedelta(1)
+                yesterday = datetime.strftime(yesterday, '%Y-%m-%d') + 'T00:00:00+01:00'
 
+                contracts_url = f'https://{self.domain}/api/contracts?status=published&min-commit[gt]=1&start-date[gt]={yesterday}' #2024-09-01T00:00:00+01:00'
+            
+            
             params = {
                 'offset': offset,
                 'limit': limit
@@ -168,17 +178,91 @@ class CoupaAPI:
             if response.status_code == 200:
                 contracts = response.json()
 
+                for contract in contracts:
+                    #exclude those in excludeId
+                    if contract['id'] in excludeId:
+                        continue
+
+                    #check if filteringCategory is set for a particular commodity catgory we need to filter on and if so, then filter
+                    elif contract['custom-fields'] is not None and (
+                        contract['custom-fields']['categories-applicable'] is not None and
+                        (len(contract['custom-fields']['categories-applicable']) > 0 and
+                        contract['custom-fields']['categories-applicable'][0]['id'] != filteringCategory)
+                    ):
+                        continue
+                    
+                    else:                                                
+                        print(f"Contract ID: {contract['id']}, Contract Type: {contract['name']}, Category")
+
+                        docFile = None
+
+                        try:
+                                docFile = self.get_document(contract['id'])
+
+                                if docFile == False:
+                                    docFile = None
+                        except:
+                            docFile = None
+
+
+                        lower = contract['name'].lower()
+                        isAmendment = 'renewal' in lower or 'extension' in lower or 'amendment' in lower or 'addendum' in lower or 'revised' in lower or 'renewed' in lower or 'renew' in lower
+
+                        #check if docFile is larger than 10mb, if so, then set to None
+                        #(leanix cannot handle those large files)
+                        if docFile is not None:
+                            if os.path.getsize(docFile) > 10*1024*1024:
+                                docFile = None
+
+                        if contract['start-date'] is not None:
+                            contract['start-date'] = self.get_date( contract['start-date'] )
+                        if contract['end-date'] is not None:
+                            contract['end-date'] = self.get_date( contract['end-date'] )
+
+                        c = {
+                            'coupa_contract_id': contract['id'],
+                            'coupa_supplier_id': contract['supplier']['id'],
+                            'name': contract['name'],
+                            'type': contract['type'],
+                            'owner_mail': contract['contract-owner']['email'],
+                            'owner_fullname': contract['contract-owner']['fullname'],
+                            'start-date':  contract['start-date'],
+                            'end-date':  contract['end-date'] ,
+                            'supplier': contract['supplier']['custom-fields']['harmonized-supplier-name'],
+                            'currency': contract['currency']['code'],
+                            'TCV': contract['custom-fields']['total-contract-value-in-eur'],
+                            'min-commitment': float(contract['min-commit']),
+                            'max-commitment': float(contract['max-commit']),
+                            'min-commitment-eur': self.convert_to_eur(float(contract['min-commit']), contract['currency']['code'].upper()),
+                            'max-commitment-eur': self.convert_to_eur(float(contract['max-commit']), contract['currency']['code'].upper()),
+                            'description': contract['description'],
+                            'document': docFile,
+                            'amendment': isAmendment,
+                            'url': contract['legal-agreement-url']
+                        }
+
+                        #make supplier path safe
+                        fileSupplier = c['supplier'] = re.sub(r'[^a-zA-Z0-9]', '_', c['supplier'])
+
+                        with open(f'contracts-{fileSupplier}-{c['coupa_contract_id']}.json', 'w') as f:
+                            f.write(json.dumps(c, indent=4))
+
+
+                        callback(c)
+
+                        time.sleep(1)
+
                 if not contracts:
                     break  # No more contracts to retrieve
 
-                all_contracts.extend(contracts)
+                # all_contracts.extend(contracts)                
                 offset += limit
             else:
                 print(f"Failed to retrieve contracts: {response.status_code}")
                 print(f"Response: {response.text}")
                 break
 
-        return all_contracts
+        # return all_contracts
 
     
 
@@ -324,7 +408,7 @@ class CoupaAPI:
             if len(purchase_orders) < limit:
                 break
             offset += limit
-            time.sleep(1)  # To avoid hitting rate limits
+            # time.sleep(1)  # To avoid hitting rate limits
 
             for po in purchase_orders:
                 print(po['supplier']['name'])
@@ -405,10 +489,10 @@ class CoupaAPI:
                     'supplier': contract['supplier']['custom-fields']['harmonized-supplier-name'],
                     'currency': contract['currency']['code'],
                     'TCV': contract['custom-fields']['total-contract-value-in-eur'],
-                    'min-commitment': contract['min-commit'],
-                    'max-commitment': contract['max-commit'],
-                    'min-commitment-eur': self.convert_to_eur(contract['min-commit'], contract['currency']['code'].upper()),
-                    'max-commitment-eur': self.convert_to_eur(contract['max-commit'], contract['currency']['code'].upper()),
+                    'min-commitment': float(contract['min-commit']),
+                    'max-commitment': float(contract['max-commit']),
+                    'min-commitment-eur': self.convert_to_eur(float(contract['min-commit']), contract['currency']['code'].upper()),
+                    'max-commitment-eur': self.convert_to_eur(float(contract['max-commit']), contract['currency']['code'].upper()),
                     'description': contract['description'],
                     'document': docFile,
                     'amendment': isAmendment,
