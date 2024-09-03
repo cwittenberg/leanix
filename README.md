@@ -14,11 +14,10 @@ Features:
 - Auto-detection of Amendment vs Contract factsheet sub-types
 - Facilitates currency conversion for contracts in non-group currency (i.e. EUR)
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
-- Some hard-coded tagging of i.e. hardware/telephony/statements of work and licenses (later is relevant)
+- Also does some hard-coded tenant-specific matching of i.e. hardware/telephony/statements of work and licenses (later is relevant)
 
 TODO: 
 - [ ] Automated scheduling (i.e. using Azure CF)
-- [X] Load also Support and SoW contracts outside of licenses
 - [ ] Add RFx detection 
 - [ ] Update IT Components with Cost from contracts
 
