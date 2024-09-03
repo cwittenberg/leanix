@@ -10,10 +10,11 @@ How it works:
 - Sanitized Contracts are uploaded to LeanIX via GraphQL
 
 Features:
-- Auto-detection for existing Applications and Providers in LeanIX metamodel during load
+- Rudimentary auto-detection for existing Applications and Providers in LeanIX metamodel during load
 - Auto-detection of Amendment vs Contract factsheet sub-types
 - Facilitates currency conversion for contracts in non-group currency (i.e. EUR)
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
+- Some hard-coded tagging of i.e. hardware/telephony/statements of work and licenses (later is relevant)
 
 TODO: 
 - [ ] Automated scheduling (i.e. using Azure CF)
