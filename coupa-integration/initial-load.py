@@ -75,6 +75,7 @@ def detectApp(description, supplier=None):
     else:
         appId = None
 
+
     return appId, domains
 
 
@@ -141,6 +142,7 @@ def parseContract(contract):
             return
 
 
+
     contractName = contract['name']
 
     app,domains = detectApp(contract['name'], contract['supplier'])
@@ -167,6 +169,7 @@ def parseContract(contract):
         #noticeDate is end date minus 6 months. convert to timestamp then deduct 6 months render as YYYY-MM-DD
         noticeDate = datetime.datetime.strptime(contract['end-date'], '%Y-%m-%d') - datetime.timedelta(days=180)
         noticeDate = noticeDate.strftime('%Y-%m-%d')      
+
 
     
     if contract['start-date'] is None:
@@ -213,8 +216,6 @@ def parseContract(contract):
     
     print("OK - " + title)
 
-    
-    
 
 
 if __name__ == "__main__":
