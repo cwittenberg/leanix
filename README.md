@@ -18,7 +18,7 @@ Features:
 
 TODO: 
 - [ ] Automated scheduling (i.e. using Azure CF)
-- [ ] Load also Support and SoW contracts outside of licenses
+- [X] Load also Support and SoW contracts outside of licenses
 - [ ] Add RFx detection 
 - [ ] Update IT Components with Cost from contracts
 
