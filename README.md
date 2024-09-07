@@ -25,3 +25,11 @@ Used resources:
 - https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation/the-coupa-core-api/resources/transactional-resources/contracts-api-(contracts)
 - https://docs-eam.leanix.net/reference/example-queries-and-mutations
 - https://exchangeratesapi.io/
+
+## Events
+Purpose:
+- Send adaptivecard in Teams to update your team of a change made within LeanIX
+
+Features:
+- User/avatar retrieval from within LeanIX
+- No need to use LeanIX dedicated Teams app
