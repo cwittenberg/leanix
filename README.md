@@ -16,9 +16,11 @@ Features:
 - Downloads contracts zipfile from Coupa, unzips and uploads PDF as Resource to Contract
 - Also does some hard-coded tenant-specific matching of i.e. hardware/telephony/statements of work and licenses (later is relevant)
 
+Scheduling:
+- Can be scheduled in Azure Automation, make sure to add required packages as wheel (.whl)
+- Dependencies for runbook: gql, requests_toolbelt, tenacity
+
 TODO: 
-- [ ] Automated scheduling (i.e. using Azure CF)
-- [ ] Add RFx detection 
 - [ ] Update IT Components with Cost from contracts
 
 Used resources:
