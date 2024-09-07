@@ -28,7 +28,7 @@ Used resources:
 - https://docs-eam.leanix.net/reference/example-queries-and-mutations
 - https://exchangeratesapi.io/
 
-![image](https://github.com/user-attachments/assets/f70b8a8b-fc89-44bd-b0cc-eb94933ee7f9)
+![image](https://github.com/user-attachments/assets/d7690ba6-0186-43d0-bccd-57f4a3483508)
 
 
 ## Events
