@@ -28,6 +28,9 @@ Used resources:
 - https://docs-eam.leanix.net/reference/example-queries-and-mutations
 - https://exchangeratesapi.io/
 
+![image](https://github.com/user-attachments/assets/f70b8a8b-fc89-44bd-b0cc-eb94933ee7f9)
+
+
 ## Events
 Purpose:
 - Send adaptivecard in Teams to update your team of a change made within LeanIX
@@ -35,3 +38,6 @@ Purpose:
 Features:
 - User/avatar retrieval from within LeanIX
 - No need to use LeanIX dedicated Teams app
+
+  ![image](https://github.com/user-attachments/assets/f2ad94f5-e964-489d-9cd1-3b09fbadb4b1)
+
