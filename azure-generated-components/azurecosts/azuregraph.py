@@ -365,7 +365,7 @@ ResourceContainers
         response = []
         for row in data:   
             if row['resourceGroup'] != resource_group:
-                continue#######THIS IS NOT WORKING APPARENTLY. STILL HAVE DEV WHERE I DONT WANT IT
+                continue
 
             if row['resourceGroup'].lower().startswith('p'):
                 row['environment'] = 'Production'
