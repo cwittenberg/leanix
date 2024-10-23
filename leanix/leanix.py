@@ -69,7 +69,21 @@ class LeanIXAPI:
             else:
                 raise ValueError("Invalid HTTP method. Only GET and POST are supported.")
             response.raise_for_status()
-        except requests.exceptions.RequestException as e:
+
+        except Exception as e:
+            
+            if response:
+                # check if status_code attribute exists
+                if hasattr(response, 'status_code'):
+                    #check if error is a 401
+                    if response.status_code == 401:
+                        print("Unauthorized. Re-authenticating...")
+                        self.header = self._authenticate()
+                        return self._call_generic(url, method, payload)
+                    else:
+                        # print(response.text)
+                        pass
+
             print(f"Request failed: {e}")
             raise
 
@@ -1823,6 +1837,28 @@ class LeanIXAPI:
 
 
 
+    def metric_add_website_traffic(self, factsheet_id, schema_uuid, timeseries_data):
+        """
+        Add timeseries data to the factsheet.
+        """
+        url = self.metrics_url + f"/services/metrics/v2/schemas/{schema_uuid}/points"
+
+        i = 0
+        for row in timeseries_data:            
+
+            # response = requests.post(url, headers=self.header, json=row)
+
+            resp = self._call_generic(url, "POST", payload=row)
+
+            i+=1
+            if i%10==0:
+                print(f"\tProcessed {i} metrics for {row['hostname']}")
+
+
+        print("Done\n")
+            
+        
+
 
     def metric_add_timeseries_data(self, factsheet_id, schema_uuid, timeseries_data):
         """
@@ -1844,6 +1880,14 @@ class LeanIXAPI:
             dt = datetime.strptime(data["timestamp"], "%Y-%m-%dT%H:%M:%S.%fZ")
             data["timestamp"] = dt.timestamp()
 
+            # dt = datetime.strptime(data["date"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            # data["date"] = dt.timestamp()
+
+
+            #round row["value"] to 2 digits
+
+
+            # data = data | row
 
             """
             {
@@ -1856,6 +1900,8 @@ class LeanIXAPI:
             """
 
             print(data)
+
+            # exit(0)
 
             #exclude factSheetID from data
             response = requests.post(url, headers=self.header, json=data)
