@@ -1,5 +1,34 @@
 # leanix
 
+## Simple facade to integrate Python with LeanIX
+See "leanix/leanix.py"
+
+Purpose:
+- Easy interoperability between Python and the LeanIX graphQL API - without having to code lots of GraphQL yourself.
+
+Features:
+- Create/update/archive factsheets
+- Adding tags
+- Create contracts (if you have the Contract customization enabled)
+- Facilitates re-authentication/retry when needed
+- Search in factsheets
+- Creating relations between factsheets, dynamically
+- Management of Resources to factsheets
+- Create metrics/schema's
+- Get SaaS discovery intelligence (i.e. for Zscaler integration)
+
+## Generate IT Components based on Azure
+Purpose:
+- Why integrate with ServiceNow or other CMDBs if you can generate parts of your metamodel based on what is instantiated/consumed on Azure?
+
+Features:
+- Integration with Azure Graph
+- Integration with Azure Cost Management API
+- Generates IT Component structure based on Resource Groups
+
+TODO:
+- [ ] Integration with GPT4o to auto-generate Modules to a given application
+
 ## Coupa integration
 Purpose:
 - Load contracts from Coupa into LeanIX such that Architects/those responsible can receive notifications about when an opportunity arises to make a (commercial) transition in view of roadmap
