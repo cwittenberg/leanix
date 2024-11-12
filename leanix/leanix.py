@@ -3,6 +3,7 @@ from datetime import datetime,timezone, timedelta
 
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
+from gql.transport.exceptions import TransportServerError
 
 import os
 import json
@@ -10,7 +11,7 @@ import requests
 import warnings
 from urllib3.exceptions import InsecureRequestWarning
 
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log, retry_if_exception
 import logging
 
 # Set up logging to see the retry attempts
@@ -33,7 +34,7 @@ class LeanIXAPI:
         self.metrics_url = metrics_url
         self.search_base_url = search_base_url
 
-        self.header = self._authenticate()
+        self._authenticate()
         self.header['x-graphql-enable-extensions'] = 'true'
         self.upload_url = self.request_url + '/upload'
 
@@ -52,7 +53,9 @@ class LeanIXAPI:
                                  data={'grant_type': 'client_credentials'}, verify=False)
         response.raise_for_status()
         access_token = response.json()['access_token']
-        return {'Authorization': 'Bearer ' + access_token}
+        self.header = {'Authorization': 'Bearer ' + access_token}
+
+        return self.header
     
     @retry(
         stop=stop_after_attempt(3),  # Stop after 5 attempts
@@ -63,15 +66,21 @@ class LeanIXAPI:
     def _call_generic(self, url, method="GET", payload=None):
         try:
             if method == "GET":
-                response = requests.get(url, headers=self.header, verify=False)
+                response = requests.get(url, headers=self.header, verify=False, timeout=15)
             elif method == "POST":
-                response = requests.post(url, headers=self.header, json=payload, verify=False)
+                response = requests.post(url, headers=self.header, json=payload, verify=False, timeout=15)
             else:
                 raise ValueError("Invalid HTTP method. Only GET and POST are supported.")
-            response.raise_for_status()
 
-        except Exception as e:
-            
+            if response is not None:
+                if response.status_code == 401:
+                    print("Unauthorized. Re-authenticating...")
+                    self.header = self._authenticate()
+                    return self._call_generic(url, method, payload)
+                else:
+                    response.raise_for_status()
+
+        except requests.exceptions.RequestException as e:
             if response:
                 # check if status_code attribute exists
                 if hasattr(response, 'status_code'):
@@ -83,7 +92,7 @@ class LeanIXAPI:
                     else:
                         # print(response.text)
                         pass
-
+            
             print(f"Request failed: {e}")
             raise
 
@@ -160,8 +169,18 @@ class LeanIXAPI:
         try:
             # print(json_data)  # For debugging purposes
             response = requests.post(url=self.request_url, headers=self.header, data=json_data, verify=False, timeout=10)
-            # print(response.text)
-            response.raise_for_status()
+            
+            if response is not None:
+                # check if status_code attribute exists
+                if hasattr(response, 'status_code'):
+                    #check if error is a 401
+                    if response.status_code == 401:
+                        print("Unauthorized. Re-authenticating...")
+                        self.header = self._authenticate()
+                        return self._call(query, dump)
+                    else:
+                        response.raise_for_status()        
+            
         except requests.exceptions.RequestException as e:
             if response:
                 # check if status_code attribute exists
@@ -180,7 +199,19 @@ class LeanIXAPI:
         
         return response.json()
 
+    def retry_if_http_421(exception):
+        if isinstance(exception, TransportServerError):
+            if exception.http_status == 421:
+                return True
+        return False
 
+
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def create_factsheet(self, type, name, subtype=None):
         # Create the GraphQL mutation with or without the patches for category
         mutation = """
@@ -245,8 +276,58 @@ class LeanIXAPI:
 
         return response['createFactSheet']['factSheet']['id']
         
+    @retry(
+        stop=stop_after_attempt(20),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=500),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
+    def _gql_call(self, url, graphQL, variables):
+        # Create the transport with the given headers
+        transport = RequestsHTTPTransport(
+            url=url,
+            headers=self.header,
+            use_json=True,
+            verify=False
+        )
+
+        # Create a GraphQL client
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+
+        try:
+            # Execute the mutation
+            response = client.execute(graphQL, variable_values=variables)         
+            
+
+            return response
+        
+        except TransportServerError as e:
+            logger.error(f"TransportServerError occurred: {e}")
+            
+            logger.info("Attempting to reauthenticate...")
+            
+            self._authenticate()
+            
+            # Re-raise the exception to trigger the retry
+            raise
+          
+                
+        except Exception as e:
+            logger.error(f"Error occurred during _gql_call: {e}")
+            
+            self._authenticate()
+            
+
+            # Re-raise the exception to trigger the retry
+            raise
 
 
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def modify_factsheet(self, factsheet_id, patches):
         # Create the GraphQL mutation
         mutation = gql("""
@@ -269,20 +350,7 @@ class LeanIXAPI:
             "patches": patches
         }
 
-        # Create the transport with the given headers
-        transport = RequestsHTTPTransport(
-            url=self.request_url,
-            headers=self.header,
-            use_json=True,
-            verify=False
-        )
-
-        # Create a GraphQL client
-        client = Client(transport=transport, fetch_schema_from_transport=True)
-
-        # Execute the mutation
-        response = client.execute(mutation, variable_values=variables)
-
+        response = self._gql_call(self.request_url, mutation, variables)
 
         return response['updateFactSheet']['factSheet']['id']
     
@@ -389,6 +457,28 @@ class LeanIXAPI:
         ]
 
         return self.modify_factsheet(factsheet_id, patches)
+    
+    def remove_relation(self, source_id, target_id, relationship_name):
+        relationshipID = None
+        relationshipIDs = self.get_relationship_ids(source_id, "ITComponent", relationship_name)
+        for rel in relationshipIDs:
+            if rel['to'] == target_id:
+                relationshipID = rel['relationship_id']
+
+        if relationshipID is not None:
+            patches = [
+                {
+                    "op":"remove",
+                    "path": f"/{relationship_name}/{relationshipID}",
+                    "value":""
+                }
+            ]
+
+            return self.modify_factsheet(source_id, patches)
+        else:
+            print("Error, I could not find the relationship to delete")
+            print(source_id, target_id, relationship_name)
+
     
     def create_relation_if_not_exists(self, source_id, target_id, on_factsheet_type, relation_name, cost=None):
         query = """
@@ -553,6 +643,7 @@ class LeanIXAPI:
             # Check if the Fact Sheet exists in the response
             fact_sheet = response.get('data', {}).get('factSheet')
         except:
+            print(query)
             print(response)
             
             print("ERROR occured. Exiting prematurely...")
@@ -771,9 +862,229 @@ class LeanIXAPI:
             contracts.append(item)
 
         return contracts
+    
+
+    def add_subscription(self, factsheetId, roleId, email, firstName, lastName):
+        graphql_mutation = gql("""
+            mutation m($user:UserInput!, $roles:[SubscriptionToSubscriptionRoleLinkInput])
+            {
+                createSubscription(factSheetId:\"%s\", user:$user, type:ACCOUNTABLE, roles:$roles) 
+                {
+                    id 
+                    user 
+                    {
+                        id
+                        firstName 
+                        lastName
+                        displayName
+                        email
+                        technicalUser
+                        permission {
+                            role
+                            status
+                        }
+                    }                        
+                    type
+                    roles 
+                    {
+                        id
+                        name
+                        description
+                        comment
+                        subscriptionType
+                    }
+                    createdAt                 
+                }
+            }
+        """ % (factsheetId)
+        )
+
+        # Define the variables for the mutation
+        variables = {
+            "user": {
+                "email": email,
+                "firstName": firstName,
+                "lastName": lastName
+            },
+            "roles": [
+                {"id": roleId, "comment": ""} 
+            ]
+        }
+        
+        response = self._gql_call(self.request_url, graphql_mutation, variables)
+
+        if 'errors' in response:
+            print("Error occured while adding website resource")
+            print(response)
+            return None
+        
+        return True
+    
 
 
-    def get_all(self, type, specificSubtype=None):
+    def get_subscriptions(self, factsheetId):
+        graphql_query = gql("""
+            query($factsheetId: ID!) {
+                factSheet(id: $factsheetId) {
+                    id
+                    subscriptions {
+                    edges {
+                        node {
+                        id
+                        user {
+                            id
+                            email
+                        }
+                        type
+                        roles {
+                            id
+                            name
+                            comment
+                        }
+                        }
+                    }
+                    }
+                }
+            }
+        """)
+
+        variables = {
+            "factsheetId": factsheetId
+        }
+
+        response = self._gql_call(self.request_url, graphql_query, variables)
+
+        if 'errors' in response:
+            print("Error occurred while fetching subscriptions")
+            print(response)
+            return None
+
+        subscriptions = []
+
+        if "factSheet" in response:
+            if "subscriptions" in response["factSheet"]:
+                if "edges" in response["factSheet"]["subscriptions"]:                   
+                    edges = response['factSheet']['subscriptions']['edges']
+
+                    for edge in edges:
+                        item = {
+                            'id': edge['node']['id'],
+                            'user': edge['node']['user'],
+                            'type': edge['node']['type'],
+                            'role_names': [],
+                            'roles': edge['node']['roles']
+                        }
+
+                        for role in edge['node']['roles']:
+                            item['role_names'].append(
+                                role['name']
+                            )
+
+                        subscriptions.append(item)
+
+
+        return subscriptions
+
+
+    def subscription_exists(self, factsheetId, findTypes=["ACCOUNTABLE", "RESPONSIBLE"]):
+        subscriptions = self.get_subscriptions(factsheetId)
+        if subscriptions is None:
+            return False  # Or handle the error as needed
+
+        for subscription in subscriptions:
+            if subscription['type'] in findTypes:
+                return True  # Subscription exists
+
+        return False
+    
+
+    def delete_subscription(self, subscription_id):
+        graphql_mutation = gql("""
+        mutation($subscriptionId: ID!) {
+            deleteSubscription(id: $subscriptionId) {
+                id
+                name
+            }
+        }
+        """)
+
+        variables = {
+            "subscriptionId": subscription_id
+        }
+
+        # Ensure the client is initialized
+        response = self._gql_call(self.request_url, graphql_mutation, variables)
+
+        try:
+            deleted_subscription = response['deleteSubscription']
+            print(f"Subscription with ID '{deleted_subscription['id']}' and name '{deleted_subscription['name']}' has been deleted.")
+            return deleted_subscription
+        except Exception as e:
+            print("Error occurred while deleting the subscription:")
+            print(e)
+            return None
+        
+    
+    def update_subscription(self, subscription_id, user_id, subscription_type, roles):
+        graphql_mutation = gql("""
+        mutation($subscriptionId: ID!, $user: UserInput!, $type: SubscriptionType!, $roles: [SubscriptionToSubscriptionRoleLinkInput]) {
+            updateSubscription(
+                id: $subscriptionId,
+                user: $user,
+                type: $type,
+                roles: $roles
+            ) {
+                id
+                user {
+                    id
+                    email
+                }
+                type
+                roles {
+                    id
+                    name
+                    comment
+                }
+            }
+        }
+        """)
+
+        variables = {
+            "subscriptionId": subscription_id,
+            "user": {
+                "id": user_id
+            },
+            "type": subscription_type,
+            "roles": roles
+        }
+
+        
+
+        try:
+            response = self._gql_call(self.request_url, graphql_mutation, variables)
+            return response['updateSubscription']
+        except Exception as e:
+            print("Error occurred while updating the subscription:")
+            print(e)
+            return None
+
+
+    def get_all(self, type, specificSubtype=None, includeChildren=False, returnAsRaw=False):
+        childStr = ""
+        if includeChildren:
+            childStr = """
+                                relToChild {
+                                    edges {
+                                        node {
+                                            factSheet {
+                                                id
+                                                name                                                
+                                            }
+                                        }
+                                    }
+                                }
+            """
+
         if specificSubtype is None:            
             query = """
             {
@@ -784,8 +1095,13 @@ class LeanIXAPI:
                             name              
                             ...on %s {
                                 externalId {
-                                    externalId
+                                    externalId                                    
+                                    comment
+                                    externalUrl
+                                    status
                                 }
+
+                                %s
                             }
 
                             ...on Application{
@@ -795,7 +1111,7 @@ class LeanIXAPI:
                     }
                 }
             }
-            """ % (type, type)
+            """ % (type, type, childStr)
         else:
             query = """
             {
@@ -810,8 +1126,13 @@ class LeanIXAPI:
                             name              
                             ...on %s {
                                 externalId {
-                                    externalId
+                                    externalId                                                                      
+                                    comment
+                                    externalUrl
+                                    status                                
                                 }
+
+                                %s
                             }
 
                             ...on Application{
@@ -821,12 +1142,16 @@ class LeanIXAPI:
                     }
                 }
             }
-            """ % (type, specificSubtype, type)
+            """ % (type, specificSubtype, type, childStr)
         
         response = self._call(query)
 
+        if returnAsRaw:
+            return response
+
         # Collect all applications with their ids
         applications = []
+        
 
         for edge in response['data']['allFactSheets']['edges']:
             item = {
@@ -859,6 +1184,12 @@ class LeanIXAPI:
         return self.create_factsheet("Application", name)
     
     
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def create_contract(self, supplierName, name, description, subtype="Contract", isActive=True, isExpired=False, contractValue=0, numberOfSeats=None, volumeType="License", phasein_date=None, active_date=None, notice_date=None, eol_date=None, externalId="", externalUrl="", applicationId="", domains=[], managedByName=None, managedByEmail=None, currency="EUR", additionalTags=[]):
         # set None to ""
         if phasein_date is None:
@@ -1233,18 +1564,8 @@ class LeanIXAPI:
             "metadata": None,
             "refId": None
         }
-
-        
-        transport = RequestsHTTPTransport(
-            url=self.request_url,
-            headers=self.header,
-            use_json=True,
-            verify=False
-        )
-
-        client = Client(transport=transport, fetch_schema_from_transport=True)
-
-        response = client.execute(graphql_mutation, variable_values=variables)
+    
+        response = self._gql_call(self.request_url, graphql_mutation, variables)
 
         if 'errors' in response:
             print("Error occured while adding website resource")
@@ -1254,6 +1575,12 @@ class LeanIXAPI:
         return True
 
 
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def upload_resource_to_factsheet(self, fact_sheet_id, file_path, document_name, document_type="documentation", description=None):
         # Define the GraphQL mutation as a string
         graphql_mutation = """
@@ -1305,8 +1632,25 @@ class LeanIXAPI:
                 'graphQLRequest': (None, graphQL_request, 'application/json')
             }
 
-            # Make the POST request
-            response = requests.post(self.upload_url, headers=self.header, files=files, verify=False)
+
+            #try if not 421, else reauthenticate
+
+            try:
+                # Make the POST request
+                response = requests.post(self.upload_url, headers=self.header, files=files, verify=False)
+            except:
+                # get HTTP error code.
+                if response is not None:
+                    if response.status_code == 421:
+                        self._authenticate()
+                        return self.upload_resource_to_factsheet(fact_sheet_id, file_path, document_name, document_type, description)
+                else:
+                    raise
+            
+            if response.status_code == 421:
+                self._authenticate()
+                return self.upload_resource_to_factsheet(fact_sheet_id, file_path, document_name, document_type, description)
+
 
         # Check for errors
         if response.status_code == 200:
@@ -1454,6 +1798,13 @@ class LeanIXAPI:
         self.delete_contracts_with_tag(self._coupa_tag)
     
     
+
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def delete_contracts_with_tag(self,theTag):
         """Delete all contract factsheets that have the 'Coupa' tag."""
         if not self._coupa_tag:
@@ -1543,6 +1894,13 @@ class LeanIXAPI:
         print(f"Completed deletion process. Total contracts deleted: {len(contracts_to_delete)}")
 
     
+
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def delete_factsheets_with_tag(self, factsheetType, theTag):
         """Delete all contract factsheets that have the 'Coupa' tag."""
         if not self._coupa_tag:
@@ -1657,6 +2015,13 @@ class LeanIXAPI:
         response = client.execute(query)
         return response['factSheet']['rev']
 
+
+    @retry(
+        stop=stop_after_attempt(3),  # Stop after 3 attempts
+        wait=wait_exponential(multiplier=1, min=2, max=60),  # Exponential backoff
+        retry=retry_if_exception_type(requests.exceptions.RequestException),  # Retry on any requests exceptions
+        before_sleep=before_sleep_log(logger, logging.INFO)  # Log before retrying
+    )
     def archive_factsheet(self, factsheet_id):
         """Archive a factsheet by setting its status to 'ARCHIVED'."""
 
@@ -1694,17 +2059,7 @@ class LeanIXAPI:
             ]
         }
 
-        # Execute the mutation using the LeanIX API client
-        transport = RequestsHTTPTransport(
-            url=self.request_url,
-            headers=self.header,
-            use_json=True,
-            verify=False
-        )
-
-        client = Client(transport=transport, fetch_schema_from_transport=True)
-
-        response = client.execute(archive_mutation, variable_values=variables)
+        response = self._gql_call(self.request_url, archive_mutation, variables)
 
         if 'result' in response and response['result']:
             print(f"Archived factsheet: ID: {factsheet_id}")
@@ -1924,36 +2279,23 @@ class LeanIXAPI:
         else:
             raise Exception(f"Failed to add timeseries data: {response.status_code}, {response.text}")
         
+
     def get_discovery_utilization(self, discoverySource, linkedApps):
-        # last_7days = datetime.now(timezone.utc) - timedelta(days=7)
-        # last_7days_str = last_7days.strftime("%Y-%m-%dT00:00:00Z")
+        collection = {}
+        for discoveryAppId in linkedApps:
+            factsheetId = linkedApps[discoveryAppId]
 
-        last_1days = datetime.now(timezone.utc) - timedelta(days=1)
-        last_1days_str = last_1days.strftime("%Y-%m-%dT00:00:00Z")
+            #get metrics for this factsheet
+            data = self._call_generic(f"{self.metrics_url}services/discovery-linking/v1/discovery-items/{discoveryAppId}", "GET")
 
-        # first download big report
-        data_url = f"{self.metrics_url}services/discovery-saas/v1/discoveries?cursor={last_1days_str}"
-        response = self._call_generic(data_url, "GET")
+            results = {}
+            if "discoveryDetails" in data:                
+                for detail in data['discoveryDetails']:                    
+                    results[detail['key']] = detail['value']                    
 
-        results = {}
+            collection[factsheetId] = results
 
-        for app in response['data']:
-            #validate the right discovery source is used (i.e. not Entra)
-            if 'source' in app:
-                if 'type' in app['source']:
-                    if app['source']['type'] != discoverySource:
-                        continue
-
-            if app['catalogID'] in linkedApps:
-                factsheetId = linkedApps[app['catalogID']]
-                results[factsheetId] = {}
-                
-                for detail in app['discoveryDetails']:                    
-                    results[factsheetId][detail['key']] = detail['value']                    
-
-        return results
-
-
+        return collection
 
 
     def get_discovery_linked_apps(self, sourceConfigID):
@@ -1972,7 +2314,7 @@ class LeanIXAPI:
                     "pageNumber": page_number
                 },
                 "filter": {
-                    "origin": ["discovery_saas"],
+                    "origin": ["discovery_saas_nodes"],
                     "linkingStatus": ["linked"],
                     "sourceConfigID": [sourceConfigID]
                 }
@@ -1985,18 +2327,28 @@ class LeanIXAPI:
             if not rows or len(rows) == 0:
                 break
 
-            for item in rows:
-                if "catalogEntry" in item:
-                    if item["catalogEntry"] is not None:
-                        if "catalogID" in item["catalogEntry"]:
-                            catalogID = item.get("catalogEntry", {}).get("catalogID")
-                            links = item.get("links", [])
-                            if links is not None:
-                                for link in links:
-                                    factSheetId = link.get("factSheetId")
-                                    if catalogID and factSheetId:
-                                        all_mappings[catalogID] = factSheetId
+            # for item in rows:
+            #     if "catalogEntry" in item:
+            #         if item["catalogEntry"] is not None:
+            #             if "catalogID" in item["catalogEntry"]:
+            #                 catalogID = item.get("catalogEntry", {}).get("catalogID")
+            #                 links = item.get("links", [])
+            #                 if links is not None:
+            #                     for link in links:
+            #                         factSheetId = link.get("factSheetId")
+            #                         if catalogID and factSheetId:
+            #                             all_mappings[catalogID] = factSheetId
 
+            for item in rows:
+                catalogID = item["id"]
+
+                if "structureSummary" in item:
+                    if "treeRoots" in item["structureSummary"] and len(item["structureSummary"]["treeRoots"]) > 0:
+                        for node in item["structureSummary"]["treeRoots"]:
+                            if catalogID not in all_mappings:
+                                if node["nodeIsLinked"] and node["nodeType"] == "Application":                                                            
+                                    factSheetId = node["factSheetId"]
+                                    all_mappings[catalogID] = factSheetId                    
 
             page_number += 1
 
