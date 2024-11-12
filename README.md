@@ -1,8 +1,8 @@
 # leanix
-Advanced Python based integration with LeanIX, because you need flexibility.
-- I use it with Azure Automation to enable scheduled execution of the code. See azure-automation-jobs folder for the procedural logic invoking any of the modules here.
+Collection of custom integrations I made with LeanIX. Code execution is scheduled using Azure Automation, see azure-automation-jobs folder for the procedural logic invoking any of the modules here.
 
-## Simple facade to integrate Python with LeanIX
+## Facade to simplify Python use with LeanIX
+Advanced Python library for integration with LeanIX, because as an architect you demand flexibility. This module serves as base for integrations provided below.
 See [leanix/leanix.py](./leanix/leanix.py)
 
 Purpose:
@@ -102,7 +102,7 @@ Metrics tab:
 See [leanix/leanix.py](./leanix/leanix.py) (discovery methods) and [leanix-load-zscaler-metrics.py](./azure-automation-jobs/leanix-load-zscaler-metrics.py)
 
 Purpose
-- To lifecycle your apps, you need to know the architect's vision, cost and usage.
+- To lifecycle your apps, you need to know the architect's vision, cost and **usage**. The latter is difficult to track, but no longer with this!
 - Knowing how many users your apps utilize over time is a great way to support architecture decision making.
 
 How it works:
