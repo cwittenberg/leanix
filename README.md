@@ -79,6 +79,25 @@ Used resources:
 
 ![image](https://github.com/user-attachments/assets/d7690ba6-0186-43d0-bccd-57f4a3483508)
 
+## Akamai integration
+Purpose:
+- Lifecycle your websites, just like you would applications.
+
+How it works:
+- Integrates with Akamai Report API v2 to pull all websites
+- Loads Metrics (hits and CDN effectiveness %) into LeanIX
+
+Features:
+- Grouping by Akamai CP code
+- Show # hits, bandwidth and CDN offload % as a timeseries for decision making
+
+Generated factsheets (note also past 90 day summary on main factsheet, for easy sorting in Inventory)
+![image](https://github.com/user-attachments/assets/e469c522-aff6-42c8-96d1-a8bc6fce5fc6)
+
+Metrics tab:
+![image](https://github.com/user-attachments/assets/60848a73-ecbe-4a47-9cf2-34a1b5531d69)
+
+
 
 ## Events
 Purpose:
