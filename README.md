@@ -1,8 +1,8 @@
 # leanix
-Advanced Python based integration with LeanIX. I use it with Azure Automation to enable integration with LeanIX. See azure-automation-jobs folder for the procedural logic invoking any of the modules here.
+Advanced Python based integration with LeanIX. I use it with Azure Automation to enable scheduled execution of the code for integration with LeanIX. See azure-automation-jobs folder for the procedural logic invoking any of the modules here.
 
 ## Simple facade to integrate Python with LeanIX
-See "leanix/leanix.py"
+See [leanix/leanix.py](./leanix/leanix.py)
 
 Purpose:
 - Easy interoperability between Python and the LeanIX graphQL API - without having to code lots of GraphQL yourself.
@@ -29,6 +29,25 @@ Features:
 
 TODO:
 - [ ] Integration with GPT4o to auto-generate Modules to a given application
+
+## Celonis Process Modeler integration
+See:
+[celonis/celonis.py](./celonis/celonis.py) and the following Python Runbooks: [leanix-celonis-integration.py](./azure-automation-jobs/leanix-celonis-integration.py) and [leanix-celonis-bpmn-integration.py](./azure-automation-jobs/leanix-celonis-bpmn-integration.py)
+
+Purpose:
+- Loads all BPMN Processes from Celonis (formerly known as Symbio) into LeanIX for mapping.
+- Link your Applications to your Processes, including BPMN diagrams - in the same way how SAP does this with Signavio integration - but then for Celonis/Symbio!
+- Communicate to your Process Owners how IT is realizing their Processes.
+
+How it works:
+- Based on Celonis/Symbio v2 API loads process structure in memory
+- Runs through this and copies each logical process as Business Context (process category) into LeanIX
+- Adds BPMN diagram itself (as PNG and SVG) as Resource to each Process, including hyperlinks to Symbio.
+- You can create a custom portal showing the BPMN diagrams.
+
+![image](https://github.com/user-attachments/assets/eac1074e-ceac-488e-91ff-e96a1f54331d)
+![image](https://github.com/user-attachments/assets/7618f667-b72b-48d7-a9d0-a0db82c5dd6f)
+
 
 ## Coupa integration
 Purpose:
@@ -70,4 +89,5 @@ Features:
 - No need to use LeanIX dedicated Teams app
 
   ![image](https://github.com/user-attachments/assets/f2ad94f5-e964-489d-9cd1-3b09fbadb4b1)
+
 
