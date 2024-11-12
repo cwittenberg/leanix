@@ -1,5 +1,6 @@
 # leanix
-Advanced Python based integration with LeanIX. I use it with Azure Automation to enable scheduled execution of the code for integration with LeanIX. See azure-automation-jobs folder for the procedural logic invoking any of the modules here.
+Advanced Python based integration with LeanIX, because you need flexibility.
+- I use it with Azure Automation to enable scheduled execution of the code. See azure-automation-jobs folder for the procedural logic invoking any of the modules here.
 
 ## Simple facade to integrate Python with LeanIX
 See [leanix/leanix.py](./leanix/leanix.py)
