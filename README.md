@@ -98,6 +98,17 @@ Generated factsheets (note also past 90 day summary on main factsheet, for easy 
 Metrics tab:
 ![image](https://github.com/user-attachments/assets/60848a73-ecbe-4a47-9cf2-34a1b5531d69)
 
+## Zscaler usage metrics by app
+See [leanix/leanix.py](./leanix/leanix.py) (discovery methods) and [leanix-load-zscaler-metrics.py](./azure-automation-jobs/leanix-load-zscaler-metrics.py)
+
+Purpose
+- To lifecycle your apps, you need to know the architect's vision, cost and usage.
+- Knowing how many users your apps utilize over time is a great way to support architecture decision making.
+
+How it works:
+- Utilize internal Zscaler discovery API to plot usage Metrics by application
+
+![image](https://github.com/user-attachments/assets/e136e21b-0468-4e43-a088-c0d5dcf8be8c)
 
 
 ## Events
